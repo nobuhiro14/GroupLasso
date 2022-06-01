@@ -11,7 +11,28 @@ import time
 import os 
 import scipy.io
 import numpy as np 
+import argparse
 from collections import namedtuple
+import json
+
+
+class Options():
+    def __init__(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--epoch",type = int, default = 30, help="epoch of supervised learning for base_model")
+        parser.add_argument("--bt_size", type=int, default=64, help ="batch size of supervised learning for base_model")
+        parser.add_argument("--lr", type=float, default=0.01, help =" learning rate of SGD (supervised)")
+        parser.add_argument("--momentum", type=float, default=0.9, help="momentum for SGD (supervised)")
+        parser.add_argument("--lb_group", type=float, default=5*10**-5, help="parameter of lasso")
+        parser.add_argument("--lb_l1", type=float, default=5*10**-5, help="parameter of lasso")
+        parser.add_argument("--lasso_flag",type=int, default=1, help="0: no regularization, 1: use group lasso, 2: use L1 norm 3: use L1 norm and Group Lasso")
+        parser.add_argument("--save_pth", type =str, default="result", help="directry to save result")
+        self.parser = parser 
+    
+    def get_args(self):
+        return self.parser.parse_args()
+
+
 
 class GroupLasso():
     def __init__(self,model,lb):
@@ -62,17 +83,17 @@ def measure_L2_norm(model,save_pth):
             num +=1
     fname = f"{save_pth}/L2_norm_result.mat"
 
-    scipy.io.savemat(fname,{f"norm{model_num}":results})
+    scipy.io.savemat(fname,{f"norm":results})
     #scipy.io.savemat(fname,{f"norm{model_num}":ls_result})
 
 
 def main():
-    lr = 0.001
-    momentum = 0.9
-    num_epoch = 30
-    lb = 5*10**-5
-    save_pth = "result"
-    os.makedirs(save_pth,exist_ok=True)
+    opt = Options()
+    args = opt.get_args()
+    
+    os.makedirs(args.save_pth,exist_ok=True)
+    with open(f"{args.save_pth}/params.json",mode="w") as f:
+        json.dump(args.__dict__, f, indent=4)
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     ############# prepare dataset ##############################
@@ -87,25 +108,25 @@ def main():
     root= './data', train = True,
     download =True, transform = transform)
     train_loader = torch.utils.data.DataLoader(train_dataset
-        , batch_size = 64
+        , batch_size = args.bt_size 
         , shuffle = True)
     test_dataset = datasets.CIFAR10(
     root= './data', train = False,
     download =True, transform = transform)
     test_loader = torch.utils.data.DataLoader(test_dataset
-        , batch_size = 64
+        , batch_size = args.bt_size 
         , shuffle = True)
 
     vgg16 = models.vgg16(pretrained=False)
     vgg16 = vgg16.to(device)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(params=vgg16.parameters(), lr=lr, momentum=momentum)
-    lss = GroupLasso(vgg16,lb)
+    optimizer = torch.optim.SGD(params=vgg16.parameters(), lr=args.lr, momentum=args.momentum)
+    lss = GroupLasso(vgg16,args.lb_group)
 
     n_total_step = len(train_loader)
     average_time = 0
-    for epoch in range(num_epoch):
+    for epoch in range(args.epoch):
         running_loss = 0
         start_time = time.time()
         ls_min = float('inf')
@@ -120,20 +141,26 @@ def main():
             n_corrects = (labels_hat.argmax(axis=1)==labels).sum().item()
             acc_train += 100*(n_corrects/labels.size(0))
             loss_value = criterion(labels_hat,labels)
-            loss_value += lss.get_group_lasso(vgg16)
+
+            if args.lasso_flag == 1:
+                loss_value += lss.get_group_lasso(vgg16)
+            elif args.lasso_flag == 2:
+                loss_value += lss.get_l1_norm(vgg16,args.lb_l1)
+            elif args.lasso_flag == 3:
+                loss_value += lss.get_group_lasso(vgg16) + lss.get_l1_norm(vgg16,args.lb_l1)
             loss_value.backward()
             optimizer.step()
             optimizer.zero_grad()
             running_loss += loss_value.item()
             if (i+1) % 250 == 0:
-                print(f"epoch {epoch+1}/{num_epoch}, step: {i+1}/{n_total_step}: loss = {loss_value:.5f},acc = {100*(n_corrects/labels.size(0)):.2f}%")
+                print(f"epoch {epoch+1}/{args.epoch}, step: {i+1}/{n_total_step}: loss = {loss_value:.5f},acc = {100*(n_corrects/labels.size(0)):.2f}%")
                 print()
         end_time = time.time() 
         ver_time = end_time - start_time 
         print(f"times per epoch : {ver_time:.4f} (sec)")
         average_time += ver_time 
 
-        if epoch %2 == 0 :
+        if epoch %1 == 0 :
             with torch.no_grad():
                 number_corrects = 0
                 number_samples = 0
@@ -155,9 +182,9 @@ def main():
     print("**************************************")
     print(f"Average training time : {average_time:.4f} (sec)")
     print("**************************************")
-    model_save_path = f"{save_pth}/vgg16.model"
+    model_save_path = f"{args.save_pth}/vgg16.model"
     torch.save(vgg16.state_dict(), model_save_path)
-    measure_L2_norm(vgg16,save_pth)
+    measure_L2_norm(vgg16,args.save_pth)
         
 
 
