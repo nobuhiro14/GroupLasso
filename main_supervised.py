@@ -164,7 +164,7 @@ def main():
                 loss_value += lss.get_l1_norm(vgg16,args.lb_l1)
             elif args.lasso_flag == 3:
                 loss_value += lss.get_group_lasso(vgg16) + lss.get_l1_norm(vgg16,args.lb_l1)
-            elif args.laso_flag == 4:
+            elif args.lasso_flag == 4:
                 loss_value += lss.get_filter_channel(vgg16)
             loss_value.backward()
             optimizer.step()
