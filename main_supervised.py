@@ -23,7 +23,7 @@ class Options():
         parser.add_argument("--bt_size", type=int, default=64, help ="batch size of supervised learning for base_model")
         parser.add_argument("--lr", type=float, default=0.01, help =" learning rate of SGD (supervised)")
         parser.add_argument("--momentum", type=float, default=0.9, help="momentum for SGD (supervised)")
-        parser.add_argument("--lb_group", type=float, default=5*10**-5, help="parameter of lasso")
+        parser.add_argument("--lb_group", type=float, default=9*10**-6, help="parameter of lasso")
         parser.add_argument("--lb_l1", type=float, default=5*10**-5, help="parameter of lasso")
         parser.add_argument("--lasso_flag",type=int, default=1, help="0: no regularization, 1: use group lasso, 2: use L1 norm 3: use L1 norm and Group Lasso")
         parser.add_argument("--save_pth", type =str, default="result", help="directry to save result")
@@ -64,7 +64,7 @@ class GroupLasso():
         return lasso
         
     def get_l1_norm(self,model,lb):
-        return lb*sum(p.view(-1).abs() for p in model.parameters())
+        return lb*sum(p.view(-1).abs().sum() for p in model.parameters())
 
 
 
