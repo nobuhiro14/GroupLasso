@@ -66,6 +66,22 @@ class GroupLasso():
     def get_l1_norm(self,model,lb):
         return lb*sum(p.view(-1).abs().sum() for p in model.parameters())
 
+    def get_filter_channel(self,model):
+        lasso = 0
+        ch = 0
+        
+        for m in model.modules():
+                if isinstance(m, nn.Conv2d)or isinstance(m,DynaConv2d):
+                    nr = torch.linalg.norm(m.weight,dim=(1,2,3))
+                    tmp = torch.linalg.norm(m.weight,dim=(0,2,3))
+                    ch += torch.mul(self.lb,nr).sum()
+                    lasso += torch.mul(self.lb,nr).sum()
+                elif isinstance(m,nn.Linear):
+                    tmp = m.weight.view(-1) 
+                    lmb = self.lb * torch.tensor(tmp.numel(),dtype=torch.float).sqrt()
+                    lasso += lmb* torch.sqrt(tmp.square().sum())
+        
+        return lasso + ch
 
 
     
@@ -148,6 +164,8 @@ def main():
                 loss_value += lss.get_l1_norm(vgg16,args.lb_l1)
             elif args.lasso_flag == 3:
                 loss_value += lss.get_group_lasso(vgg16) + lss.get_l1_norm(vgg16,args.lb_l1)
+            elif args.laso_flag == 4:
+                loss_value += lss.get_filter_channel(vgg16)
             loss_value.backward()
             optimizer.step()
             optimizer.zero_grad()
