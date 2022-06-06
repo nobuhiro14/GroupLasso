@@ -71,7 +71,7 @@ class GroupLasso():
         ch = 0
         
         for m in model.modules():
-                if isinstance(m, nn.Conv2d)or isinstance(m,DynaConv2d):
+                if isinstance(m, nn.Conv2d):
                     nr = torch.linalg.norm(m.weight,dim=(1,2,3))
                     tmp = torch.linalg.norm(m.weight,dim=(0,2,3))
                     ch += torch.mul(self.lb,nr).sum()
