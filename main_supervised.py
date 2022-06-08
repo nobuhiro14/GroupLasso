@@ -44,7 +44,8 @@ class GroupLasso():
                 weight = m.weight
                 for j in range(weight.shape[0]):
                     wi = weight[j]
-                    tmp[j] = (lb*torch.tensor(weight[j].numel(),dtype=torch.float).sqrt())
+                    #tmp[j] = (lb*torch.tensor(weight[j].numel(),dtype=torch.float).sqrt())
+                    tmp[j] = lb *(j+1)
                 self.lasso.append(tmp)
             
     def get_group_lasso(self,model):
@@ -86,7 +87,7 @@ class GroupLasso():
 
     
 
-def measure_L2_norm(model,save_pth):
+def measure_L2_norm(model,save_pth,epoch):
     results = {}
     #ls_result = []
     num = 1
@@ -97,7 +98,7 @@ def measure_L2_norm(model,save_pth):
             results[name] = tmp.cpu().detach().numpy()
             #ls_result.append(tmp)
             num +=1
-    fname = f"{save_pth}/L2_norm_result.mat"
+    fname = f"{save_pth}/L2_norm_result_epoch_{epoch}.mat"
 
     scipy.io.savemat(fname,{f"norm":results})
     #scipy.io.savemat(fname,{f"norm{model_num}":ls_result})
@@ -178,6 +179,9 @@ def main():
         print(f"times per epoch : {ver_time:.4f} (sec)")
         average_time += ver_time 
 
+        if epoch %2 == 1 :
+            measure_L2_norm(vgg16,args.save_pth,epoch)
+
         if epoch %1 == 0 :
             with torch.no_grad():
                 number_corrects = 0
@@ -202,7 +206,7 @@ def main():
     print("**************************************")
     model_save_path = f"{args.save_pth}/vgg16.model"
     torch.save(vgg16.state_dict(), model_save_path)
-    measure_L2_norm(vgg16,args.save_pth)
+    
         
 
 
