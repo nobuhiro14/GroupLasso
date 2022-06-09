@@ -25,7 +25,7 @@ class Options():
         parser.add_argument("--momentum", type=float, default=0.9, help="momentum for SGD (supervised)")
         parser.add_argument("--lb_group", type=float, default=9*10**-6, help="parameter of lasso")
         parser.add_argument("--lb_l1", type=float, default=5*10**-5, help="parameter of lasso")
-        parser.add_argument("--lasso_flag",type=int, default=1, help="0: no regularization, 1: use group lasso, 2: use L1 norm 3: use L1 norm and Group Lasso")
+        parser.add_argument("--lasso_flag",type=int, default=1, help="0: no regularization, 1: use group lasso, 2: use L1 norm 3: use L1 norm and Group Lasso 4: linear 5: div")
         parser.add_argument("--save_pth", type =str, default="result", help="directry to save result")
         self.parser = parser 
     
@@ -37,16 +37,28 @@ class Options():
 class GroupLasso():
     def __init__(self,model,lb):
         self.lasso = []
+        self.linear = []
+        self.devide = 4 
+        self.div = []
         self.lb = lb 
         for m in model.modules():
             if isinstance(m,nn.Conv2d):
                 tmp = torch.zeros((m.weight.shape[0]),device="cuda")
+                linear = torch.zeros((m.weight.shape[0]),device="cuda")
+                div = torch.zeros((m.weight.shape[0]),device="cuda")
                 weight = m.weight
+                quo = weight.size(1)/4 
+
+                
                 for j in range(weight.shape[0]):
-                    wi = weight[j]
-                    #tmp[j] = (lb*torch.tensor(weight[j].numel(),dtype=torch.float).sqrt())
-                    tmp[j] = lb *(j+1)
+                   
+                    tmp[j] = (lb*torch.tensor(weight[j].numel(),dtype=torch.float).sqrt())
+                    linear[j] = lb *(j+1)
+                    div[j] = lb*(weight.size(1)/quo)
                 self.lasso.append(tmp)
+                self.linear.append(linear) 
+                self.div.append(div)
+
             
     def get_group_lasso(self,model):
         lasso = 0
@@ -83,6 +95,38 @@ class GroupLasso():
                     lasso += lmb* torch.sqrt(tmp.square().sum())
         
         return lasso + ch
+    
+    def get_linear_lasso(self,model):
+        lasso = 0
+        i = 0
+        for m in model.modules():
+                if isinstance(m, nn.Conv2d):
+                    nr = torch.linalg.norm(m.weight,dim=(1,2,3))
+                
+                    lasso += torch.mul(self.linear[i],nr).sum()
+                    i += 1
+                elif isinstance(m,nn.Linear):
+                    tmp = m.weight.view(-1) 
+                    lmb = self.lb * torch.tensor(tmp.numel(),dtype=torch.float).sqrt()
+                    lasso += lmb* torch.sqrt(tmp.square().sum())
+        
+        return lasso
+    
+    def get_div_lasso(self,model):
+        lasso = 0
+        i = 0
+        for m in model.modules():
+                if isinstance(m, nn.Conv2d):
+                    nr = torch.linalg.norm(m.weight,dim=(1,2,3))
+                
+                    lasso += torch.mul(self.div[i],nr).sum()
+                    i += 1
+                elif isinstance(m,nn.Linear):
+                    tmp = m.weight.view(-1) 
+                    lmb = self.lb * torch.tensor(tmp.numel(),dtype=torch.float).sqrt()
+                    lasso += lmb* torch.sqrt(tmp.square().sum())
+        
+        return lasso
 
 
     
@@ -109,7 +153,7 @@ def main():
     args = opt.get_args()
     
     os.makedirs(args.save_pth,exist_ok=True)
-    with open(f"{args.save_pth}/params.json",mode="w") as f:
+    with open(f"{args.save_pth}/vgg16parameter.json",mode="w") as f:
         json.dump(args.__dict__, f, indent=4)
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -167,6 +211,10 @@ def main():
                 loss_value += lss.get_group_lasso(vgg16) + lss.get_l1_norm(vgg16,args.lb_l1)
             elif args.lasso_flag == 4:
                 loss_value += lss.get_filter_channel(vgg16)
+            elif args.lasso_flag == 5:
+                loss_value += lss.get_linear_lasso(vgg16)
+            elif args.lasso_flag == 6:
+                loss_value += lss.get_div_lasso(vgg16)
             loss_value.backward()
             optimizer.step()
             optimizer.zero_grad()
