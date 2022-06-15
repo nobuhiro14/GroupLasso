@@ -291,9 +291,9 @@ def main():
             
             print(f"Val accuracy {(number_corrects / number_samples)*100}%")
         
-        train_log.append(acc_train/n_total_step)
-        tp5_log.append(acc_tp5/n_total_step)
-        val_log.append(acc_val/n_total_step)
+        train_log.append((acc_train/n_total_step).to("cpu").detach().numpy())
+        tp5_log.append((acc_tp5/n_total_step).to("cpu").detach().numpy())
+        val_log.append((acc_val/n_total_step).to("cpu").detach().numpy())
     
     loginfo = {}
     loginfo["train"] = train_log 
