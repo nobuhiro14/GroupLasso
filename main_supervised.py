@@ -6,6 +6,7 @@ from torchvision import models
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 from torch import linalg as LA
+from torch.utils.data.dataset import Subset
 
 import time
 import os 
