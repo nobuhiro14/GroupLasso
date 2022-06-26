@@ -216,7 +216,7 @@ def main():
     optimizer = torch.optim.SGD(params=vgg16.parameters(), lr=args.lr, momentum=args.momentum)
 
     #### schedular parameters ########
-    decay_epoch = [30,60]
+    decay_epoch = 30
     decay_factor = 0.1
     schedular = torch.optim.lr_scheduler.StepLR(optimizer,decay_epoch,decay_factor)
     lss = GroupLasso(vgg16,args.lb_group)
