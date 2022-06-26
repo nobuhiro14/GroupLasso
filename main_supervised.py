@@ -214,6 +214,11 @@ def main():
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(params=vgg16.parameters(), lr=args.lr, momentum=args.momentum)
+
+    #### schedular parameters ########
+    decay_epoch = [30,60]
+    decay_factor = 0.1
+    schedular = torch.optim.lr_scheduler.StepLR(optimizer,decay_epoch,decay_factor)
     lss = GroupLasso(vgg16,args.lb_group)
 
     n_total_step = len(train_loader)
@@ -258,6 +263,7 @@ def main():
             loss_value.backward()
             optimizer.step()
             optimizer.zero_grad()
+            schedular.step()
             running_loss += loss_value.item()
             if (i+1) % 250 == 0:
                 print(f"epoch {epoch+1}/{args.epoch}, step: {i+1}/{n_total_step}: loss = {loss_value:.5f},acc = {100*(n_corrects/labels.size(0)):.2f}%")
@@ -291,9 +297,9 @@ def main():
             
             print(f"Val accuracy {(number_corrects / number_samples)*100}%")
         
-        train_log.append((acc_train/n_total_step).to("cpu").detach().numpy())
+        train_log.append((acc_train/n_total_step))
         tp5_log.append((acc_tp5/n_total_step).to("cpu").detach().numpy())
-        val_log.append((acc_val/n_total_step).to("cpu").detach().numpy())
+        val_log.append((acc_val/n_total_step))
     
     loginfo = {}
     loginfo["train"] = train_log 
