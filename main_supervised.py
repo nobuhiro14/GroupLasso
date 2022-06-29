@@ -20,15 +20,18 @@ import json
 class Options():
     def __init__(self):
         parser = argparse.ArgumentParser()
-        parser.add_argument("--epoch",type = int, default = 30, help="epoch of supervised learning for base_model")
+        parser.add_argument("--epoch",type = int, default = 60, help="epoch of supervised learning for base_model")
         parser.add_argument("--bt_size", type=int, default=64, help ="batch size of supervised learning for base_model")
-        parser.add_argument("--lr", type=float, default=0.01, help =" learning rate of SGD (supervised)")
+        parser.add_argument("--lr", type=float, default=0.1, help =" learning rate of SGD (supervised)")
         parser.add_argument("--split_ratio", type=float, default=0.8, help =" Split ratio for train valid datasets")
         parser.add_argument("--momentum", type=float, default=0.9, help="momentum for SGD (supervised)")
         parser.add_argument("--lb_group", type=float, default=9*10**-6, help="parameter of lasso")
         parser.add_argument("--lb_l1", type=float, default=5*10**-5, help="parameter of lasso")
         parser.add_argument("--lasso_flag",type=int, default=1, help="0: no regularization, 1: use group lasso, 2: use L1 norm 3: use L1 norm and Group Lasso 4: linear 5: div")
         parser.add_argument("--save_pth", type =str, default="result", help="directry to save result")
+        parser.add_argument("--dataset_flag", type=int,default= 0,help="0 as cifar10, 1 as cifar100")
+        parser.add_argument("--decay_epoch", type=list, default=[10,30,50],help ="epoch timing when to decay the learning rate")
+        parser.add_argument("--deactivate_scheduler",type=int, default = 0, help="0 : not use scheduler, 1 : use scheduler ")
         self.parser = parser 
     
     def get_args(self):
@@ -188,23 +191,27 @@ def main():
             (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
         )
     ])
-    dataset = datasets.CIFAR10(
-    root= './data', train = True,
-    download =True, transform = transform)
+    if args.dataset_flag ==0 :
+        dataset = datasets.CIFAR10(
+            root= './data', train = True,
+            download =True, transform = transform)
+        test_dataset = datasets.CIFAR10(
+            root= './data', train = False,
+            download =True, transform = transform)
+    elif args.dataset_flag ==1 :
+        dataset = datasets.CIFAR100(
+            root= './data', train = True,
+            download =True, transform = transform)
+        test_dataset = datasets.CIFAR100(
+            root= './data', train = False,
+            download =True, transform = transform)
 
-    train_dataset, val_dataset = split_dataset(dataset,args.split_ratio)
 
-    val_loader = torch.utils.data.DataLoader(val_dataset
+
+    train_loader = torch.utils.data.DataLoader(dataset
         , batch_size = args.bt_size 
         , shuffle = True)
-
-
-    train_loader = torch.utils.data.DataLoader(train_dataset
-        , batch_size = args.bt_size 
-        , shuffle = True)
-    test_dataset = datasets.CIFAR10(
-    root= './data', train = False,
-    download =True, transform = transform)
+    
     test_loader = torch.utils.data.DataLoader(test_dataset
         , batch_size = args.bt_size 
         , shuffle = True)
@@ -216,9 +223,9 @@ def main():
     optimizer = torch.optim.SGD(params=vgg16.parameters(), lr=args.lr, momentum=args.momentum)
 
     #### schedular parameters ########
-    decay_epoch = 30
+    #decay_epoch = [10,30,50]
     decay_factor = 0.1
-    schedular = torch.optim.lr_scheduler.StepLR(optimizer,decay_epoch,decay_factor)
+    schedular = torch.optim.lr_scheduler.MultiStepLR(optimizer,args.decay_epoch,decay_factor)
     lss = GroupLasso(vgg16,args.lb_group)
 
     n_total_step = len(train_loader)
@@ -263,7 +270,7 @@ def main():
             loss_value.backward()
             optimizer.step()
             optimizer.zero_grad()
-            schedular.step()
+            
             running_loss += loss_value.item()
             if (i+1) % 250 == 0:
                 print(f"epoch {epoch+1}/{args.epoch}, step: {i+1}/{n_total_step}: loss = {loss_value:.5f},acc = {100*(n_corrects/labels.size(0)):.2f}%")
@@ -271,6 +278,9 @@ def main():
                 print()
         
         ######################### end of epoch ################################
+        if args.deactivate_scheduler == 1 :
+            schedular.step()
+        
         end_time = time.time() 
         ver_time = end_time - start_time 
         print(f"times per epoch : {ver_time:.4f} (sec)")
@@ -284,7 +294,7 @@ def main():
         with torch.no_grad():
             number_corrects = 0
             number_samples = 0
-            for i, (imgs,labels) in enumerate(val_loader):
+            for i, (imgs,labels) in enumerate(test_loader):
                 imgs = imgs.to(device)
                 labels = labels.to(device)
 
